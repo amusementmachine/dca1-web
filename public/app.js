@@ -31,12 +31,13 @@
     if (value != null) n.textContent = String(value);
     return n;
   }
-  function metric(label, value) {
-    const card = el('article', 'card');
-    card.append(el('div', 'metric-label', label), el('div', 'metric-value', value));
+  function metric(label, value, icon, accent) {
+    const card = el('article', 'card metric-card ' + accent);
+    card.append(el('span', 'metric-icon', icon), el('div', 'metric-label', label), el('div', 'metric-value', value));
+    if (value.includes('—')) card.appendChild(el('div', 'metric-note', 'Not reported in this snapshot'));
     return card;
   }
-  function setStatus(value) { $('status').textContent = value; }
+  function setStatus(value) { $('status').textContent = value; $('status').dataset.state = value.startsWith('Live') ? 'live' : /failed|unavailable|removed/i.test(value) ? 'error' : 'waiting'; }
 
   async function signIn() {
     $('gateMessage').textContent = '';
@@ -74,6 +75,10 @@
     ['kpis','campaigns','thinking','vault','learning','journal','response','direction','historyTable'].forEach(id => { clear($(id)); $(id).textContent = message; });
     $('waveBadge').textContent = '—'; $('waveMeta').textContent = '';
     $('iterationCount').textContent = '0';
+    $('heroHeadline').textContent = 'Waiting for your next snapshot';
+    $('heroScore').textContent = '—'; $('heroPhase').textContent = 'Awaiting signal';
+    $('scoreGauge').style.setProperty('--score', '0%'); $('scoreGauge').setAttribute('aria-label', 'Wave score unavailable');
+    $('campaignCount').textContent = 'Campaigns loading…';
     chartItems = []; drawWave([]);
   }
 
@@ -125,20 +130,28 @@
     const kpis = $('kpis');
     clear(kpis);
     [
-      ['DCA1 value', fmtMoney(portfolio.total_usd ?? portfolio.dca1_total_usd ?? data.dca1_total_usd)],
-      ['Available USD', fmtMoney(portfolio.available_usd ?? portfolio.dca1_available_usd ?? data.available_usd)],
-      ['Wave phase', wave.phase != null ? 'Phase ' + wave.phase : '—'],
-      ['Wave score', text(wave.score ?? wave.precursor_score)],
-      ['Maker / taker', `${fmtPct(numeric(fee.maker) ? fee.maker * 100 : null)} / ${fmtPct(numeric(fee.taker) ? fee.taker * 100 : null)}`],
-      ['Vault value', fmtMoney(vault.market_value_usd ?? vault.vault_market_value_usd)]
-    ].forEach(([a,b]) => kpis.appendChild(metric(a,b)));
+      ['DCA1 value', fmtMoney(portfolio.total_usd ?? portfolio.dca1_total_usd ?? data.dca1_total_usd), '💰', 'mint'],
+      ['Available USD', fmtMoney(portfolio.available_usd ?? portfolio.dca1_available_usd ?? data.available_usd), '💵', 'mint'],
+      ['Wave phase', wave.phase != null ? 'Phase ' + wave.phase : '—', '🌊', 'blue'],
+      ['Wave score', text(wave.score ?? wave.precursor_score), '📡', 'blue'],
+      ['Maker / taker', `${fmtPct(numeric(fee.maker) ? fee.maker * 100 : null)} / ${fmtPct(numeric(fee.taker) ? fee.taker * 100 : null)}`, '⚖️', 'violet'],
+      ['Vault value', fmtMoney(vault.market_value_usd ?? vault.vault_market_value_usd), '💎', 'violet']
+    ].forEach(args => kpis.appendChild(metric(...args)));
+
+    const score = wave.score ?? wave.precursor_score;
+    $('heroHeadline').textContent = data.current_thinking?.headline || data.headline || (typeof data.current_thinking === 'string' ? data.current_thinking : 'Your market, in perspective.');
+    $('heroScore').textContent = numeric(score) ? String(score) : '—';
+    $('scoreGauge').style.setProperty('--score', `${numeric(score) ? Math.max(0, Math.min(100, Number(score))) : 0}%`);
+    $('scoreGauge').setAttribute('aria-label', numeric(score) ? `Wave score ${score} out of 100` : 'Wave score unavailable');
+    $('heroPhase').textContent = wave.phase != null ? `🌊 Phase ${wave.phase}` : 'Awaiting signal';
 
     renderCampaigns(data.active_campaigns || data.campaigns || []);
     renderThinking(data.current_thinking || {});
     renderVault(vault);
     renderLearning(data.learning || data.insights || []);
     renderNarrative($('response'), data.assistant_response, 'No assistant response was saved for this iteration.');
-    renderNarrative($('direction'), data.direction || data.direction_changes, 'No direction update was saved.');
+    const direction = data.direction?.length ? data.direction : data.direction_changes;
+    renderNarrative($('direction'), direction || data.current_thinking?.direction || data.current_thinking?.headline, 'No direction update was saved.');
     $('waveBadge').textContent = wave.phase != null ? `Phase ${wave.phase}` : '—';
     $('waveMeta').textContent = `Breadth: ${text(wave.breadth)} · synchronization: ${text(wave.synchronization)}`;
   }
@@ -160,12 +173,19 @@
     const root = $('campaigns');
     clear(root);
     const campaigns = normalizeCampaigns(value);
-    if (!campaigns.length) return root.appendChild(el('div', 'muted', 'No active campaign data.'));
-    campaigns.forEach(c => {
+    $('campaignCount').textContent = `🚀 ${campaigns.length} active ${campaigns.length === 1 ? 'campaign' : 'campaigns'}`;
+    if (!campaigns.length) return root.appendChild(el('div', 'empty-state', '🔭 No active campaigns in this snapshot.'));
+    campaigns.forEach((c, index) => {
       const box = el('div', 'campaign');
-      box.appendChild(el('div', 'campaign-title', `${text(c.symbol || c.product || c.asset)} · ${text(c.units)} units`));
-      box.appendChild(el('div', 'muted', `entry ${text(c.entry)} · current ${text(c.current ?? c.bid ?? c.current_bid)} · TP ${text(c.tp ?? c.recovery_tp)} · stop ${text(c.stop)} · residual ${text(c.residual ?? c.residual_units)}`));
-      if (c.status) box.appendChild(el('div', 'muted', c.status));
+      const symbol = text(c.symbol || c.product || c.asset);
+      const header = el('div', 'campaign-head');
+      const token = el('div', 'token-icon token-' + index % 3, symbol.slice(0,2));
+      const title = el('div');
+      title.append(el('div', 'campaign-title', symbol), el('div', 'muted', numeric(c.units) ? new Intl.NumberFormat(undefined,{maximumFractionDigits:8}).format(c.units) + ' units' : 'Units not reported'));
+      header.append(token,title); box.appendChild(header);
+      const price = c.current ?? c.bid ?? c.current_bid;
+      if (numeric(price)) box.appendChild(el('div', 'campaign-price', 'Latest price · ' + new Intl.NumberFormat(undefined,{style:'currency',currency:'USD',maximumFractionDigits:8}).format(price)));
+      if (c.status) box.appendChild(el('div', 'campaign-status', (c.status.includes('protected') ? '🛡️ ' : '◉ ') + c.status.replace(/_/g, ' ')));
       root.appendChild(box);
     });
   }
@@ -198,7 +218,7 @@
     clear(root);
     const holdings = vault.holdings || vault.currently_vaulted || vault.assets || {};
     const entries = Array.isArray(holdings) ? holdings.map(v => [v.symbol || v.asset, v.units]) : Object.entries(holdings);
-    if (!entries.length) root.appendChild(el('div', 'muted', 'No vault holdings in current snapshot.'));
+    if (!entries.length) { const empty = el('div','empty-state'); empty.append(el('span','empty-icon','🌱'),el('strong','','Room to grow'),el('p','muted','No vault holdings reported in this snapshot.')); root.appendChild(empty); }
     entries.forEach(([symbol, units]) => {
       if (typeof units === 'object') units = units.units ?? units.quantity ?? JSON.stringify(units);
       const box = el('div', 'vault-item');
@@ -211,7 +231,7 @@
     const root = $('learning');
     clear(root);
     const list = Array.isArray(value) ? value : value ? [value] : [];
-    if (!list.length) return root.appendChild(el('div', 'muted', 'No learning narrative in current snapshot.'));
+    if (!list.length) return root.appendChild(el('div', 'empty-note', '💭 New insights will appear when saved with an iteration.'));
     list.slice(0,8).forEach(item => root.appendChild(el('div', 'thought', typeof item === 'string' ? item : JSON.stringify(item))));
   }
 
@@ -226,10 +246,12 @@
     }
     items.forEach(item => {
       const box = el('article', 'journal-entry');
-      const title = el('div', 'journal-title', `${dateText(item.timestamp)} · ${text(item.headline || item.summary || item.run_type || 'Iteration')}`);
+      box.appendChild(el('div','journal-time',dateText(item.timestamp)));
+      const title = el('div', 'journal-title', '✦ ' + text(item.headline || item.summary || item.run_type || 'Snapshot recorded'));
       box.appendChild(title);
       const wave = item.wave || item.wave_precursor || {};
-      box.appendChild(el('div', 'muted', `Phase ${text(wave.phase)} · score ${text(wave.score ?? wave.precursor_score)} · ${text(item.strategy_version || '')}`));
+      const score = wave.score ?? wave.precursor_score;
+      box.appendChild(el('div', 'journal-signal', wave.phase != null || numeric(score) ? `🌊 Phase ${text(wave.phase)} · score ${text(score)}` : 'Historical snapshot · score not recorded'));
       const insight = item.assistant_response || item.narrative?.assistant_response || item.direction || item.summary;
       if (insight) box.appendChild(el('div', '', insight));
       [['Insights', item.insights], ['Direction', item.direction || item.direction_changes], ['Current thinking', item.current_thinking]].forEach(([label, value]) => {
@@ -260,29 +282,42 @@
       t: x.timestamp,
       s: (x.wave || x.wave_precursor || {}).score ?? (x.wave || x.wave_precursor || {}).precursor_score ?? x.wave_score
     })).filter(x => numeric(x.s));
+    $('chartCaption').textContent = pts.length ? `● ${pts.length} scored ${pts.length === 1 ? 'snapshot' : 'snapshots'} · ${items.length - pts.length} without a recorded score` : 'Waiting for scored snapshots. Missing scores are never treated as zero.';
     const table = $('historyTable'); clear(table);
     const caption = el('caption', '', 'Score history · latest 200 iterations'); table.appendChild(caption);
     const head = el('tr'); ['Time', 'Wave score'].forEach(t => head.appendChild(el('th', '', t))); table.appendChild(head);
     pts.slice().reverse().forEach(p => { const row = el('tr'); row.append(el('td', '', dateText(p.t)), el('td', '', p.s)); table.appendChild(row); });
-    const pad = 34;
-    ctx.strokeStyle = '#29323c';
+    const pad = 38;
+    ctx.strokeStyle = '#263b51';
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(pad,pad); ctx.lineTo(pad,cssH-pad); ctx.lineTo(cssW-pad,cssH-pad); ctx.stroke();
+    [0,25,50,75,100].forEach(s => { const y = cssH-pad-s/100*(cssH-pad*2); ctx.beginPath(); ctx.moveTo(pad,y);ctx.lineTo(cssW-pad,y);ctx.stroke(); });
     if (!pts.length) {
       ctx.fillStyle = '#98a3ae'; ctx.font = '14px system-ui'; ctx.fillText('Wave history appears after mirrored scored iterations.', pad+10, pad+24); return;
     }
-    const dx = (cssW - pad*2) / Math.max(1, pts.length-1);
-    ctx.fillStyle = '#98a3ae'; ctx.font = '12px system-ui';
+    const times = pts.map(p => new Date(p.t).getTime());
+    const first = times[0], last = times.at(-1);
+    const xAt = i => pts.length === 1 ? cssW/2 : pad + ((times[i]-first) / (last-first || 1))*(cssW-pad*2);
+    const yAt = i => cssH-pad-Math.max(0,Math.min(100,Number(pts[i].s)))/100*(cssH-pad*2);
+    ctx.fillStyle = '#8ea6bd'; ctx.font = '12px system-ui';
     [0,50,100].forEach(s => ctx.fillText(String(s), 5, cssH-pad-s/100*(cssH-pad*2)));
-    ctx.fillText(dateText(pts[0].t), pad, cssH-8);
-    ctx.strokeStyle = '#7aa2ff'; ctx.lineWidth = 3; ctx.beginPath();
+    const shortDate = t => new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+    ctx.fillText(shortDate(pts[0].t), pad, cssH-10);
+    if (pts.length > 1) ctx.fillText(shortDate(pts.at(-1).t), cssW-pad-48, cssH-10);
+    if (pts.length > 1) {
+      ctx.fillStyle = 'rgba(74, 205, 218, .12)'; ctx.beginPath(); ctx.moveTo(xAt(0),cssH-pad);
+      pts.forEach((p,i) => ctx.lineTo(xAt(i),yAt(i))); ctx.lineTo(xAt(pts.length-1),cssH-pad); ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle = '#61d8e3'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.beginPath();
     pts.forEach((p,i) => {
-      const x = pad + i*dx;
-      const y = cssH-pad-(Math.max(0,Math.min(100,p.s))/100)*(cssH-pad*2);
+      const x = xAt(i);
+      const y = yAt(i);
       if (!i) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     });
     ctx.stroke();
-    pts.forEach((p,i) => { ctx.fillStyle = '#7aa2ff'; ctx.beginPath(); ctx.arc(pad+i*dx,cssH-pad-Number(p.s)/100*(cssH-pad*2),3,0,Math.PI*2); ctx.fill(); });
+    pts.forEach((p,i) => { ctx.fillStyle = '#61d8e3'; ctx.beginPath(); ctx.arc(xAt(i),yAt(i),4,0,Math.PI*2); ctx.fill(); });
+    const latest = pts.length-1;
+    ctx.fillStyle = '#d4fbff';ctx.font = 'bold 14px system-ui';
+    ctx.fillText(String(pts[latest].s), Math.min(cssW-30,xAt(latest)+8),Math.max(20,yAt(latest)-12));
   }
 
   $('signIn').addEventListener('click', signIn);

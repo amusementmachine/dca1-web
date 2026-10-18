@@ -11,8 +11,8 @@
   <main>
     <header class="topbar">
       <div>
-        <div class="eyebrow">DCA1</div>
-        <h1>Trading Control</h1>
+        <div class="eyebrow">🌊 DCA1 <span class="brand-tag">TRADING OBSERVATORY</span></div>
+        <h1>Ride the signal.</h1>
         <div id="status" class="muted" role="status" aria-live="polite">Connecting…</div>
       </div>
       <div class="actions">
@@ -24,59 +24,68 @@
     </header>
 
     <section id="gate" class="gate card">
-      <h2>Private dashboard</h2>
+      <div class="gate-orbit" aria-hidden="true">🔐</div>
+      <h2>Your trading observatory</h2>
       <p>Sign in with an authorized Google account to view DCA1 state.</p>
       <button id="gateSignIn">Sign in with Google</button>
       <p id="gateMessage" class="muted" role="alert"></p>
     </section>
 
     <div id="app" hidden>
-      <section id="kpis" class="grid kpis"></section>
+      <nav class="section-nav" aria-label="Dashboard sections"><a href="#overview">✨ Overview</a><a href="#waves">📈 Wave history</a><a href="#journalSection">📖 Journal</a></nav>
+      <section id="overview" class="hero card">
+        <svg class="hero-art" viewBox="0 0 700 220" preserveAspectRatio="none" aria-hidden="true"><path d="M0 160 C100 200 120 40 220 100 S340 220 430 120 S570 10 700 80"/><path d="M0 190 C100 150 170 190 260 140 S390 40 470 100 S590 200 700 100"/><path d="M0 210 C120 180 190 220 310 170 S490 190 560 130 S650 80 700 120"/></svg>
+        <div class="hero-copy"><div class="eyebrow">🛰️ LATEST SIGNAL</div><h2 id="heroHeadline">Waiting for your next snapshot</h2><p>One place for your campaigns, market signals, and the story behind each iteration.</p><div class="hero-chips"><span id="campaignCount" class="badge">Campaigns loading…</span><span class="badge">🔒 Private access</span></div></div>
+        <div class="signal-panel"><div id="scoreGauge" class="score-gauge" role="img" aria-label="Wave score unavailable"><div><strong id="heroScore">—</strong><span>WAVE SCORE / 100</span></div></div><div id="heroPhase" class="signal-phase">Awaiting signal</div></div>
+      </section>
+      <section id="kpis" class="grid kpis" aria-label="Current metrics"></section>
 
       <section class="grid two">
         <article class="card">
-          <h2>Active campaigns</h2>
+          <div class="section-head"><h2>🚀 Active campaigns</h2><span class="section-kicker">IN PLAY</span></div>
           <div id="campaigns" class="stack"></div>
         </article>
         <article class="card">
-          <h2>Current thinking</h2>
+          <h2>🧠 Current thinking</h2>
           <div id="thinking" class="stack"></div>
         </article>
       </section>
 
-      <section class="grid two space-top">
+      <section id="waves" class="grid two space-top">
         <article class="card">
           <div class="section-head">
-            <h2>Wave precursor</h2>
+            <h2>🌊 Wave history</h2>
             <span id="waveBadge" class="badge">—</span>
           </div>
           <canvas id="waveChart" width="900" height="320" role="img" aria-label="Wave score history, from 0 to 100. Exact values are in the score history table below."></canvas>
           <div id="waveMeta" class="muted"></div>
+          <div id="chartCaption" class="chart-caption"></div>
           <details><summary>Score history values</summary><div class="table-scroll"><table id="historyTable"></table></div></details>
         </article>
         <article class="card">
-          <h2>Mined profit vault</h2>
+          <h2>💎 Mined profit vault</h2>
           <div id="vault" class="stack"></div>
-          <h3>Latest learning</h3>
+          <h3>💡 Latest insights</h3>
           <div id="learning" class="stack"></div>
         </article>
       </section>
 
       <section class="grid two space-top">
-        <article class="card"><h2>Latest assistant response</h2><div id="response"></div></article>
-        <article class="card"><h2>Direction &amp; current strategy</h2><div id="direction"></div></article>
+        <article class="card response-card"><h2>💬 From your assistant</h2><div id="response"></div></article>
+        <article class="card"><h2>🧭 Direction &amp; current strategy</h2><div id="direction"></div></article>
       </section>
 
-      <section class="card space-top">
+      <section id="journalSection" class="card space-top">
         <div class="section-head">
           <div>
-            <h2>Iteration journal</h2>
-            <div class="muted">Realtime snapshots from Firestore.</div>
+            <h2>📖 Iteration journal</h2>
+            <div class="muted">The decisions, observations, and updates along the way.</div>
           </div>
           <span id="iterationCount" class="badge">0</span>
         </div>
         <div id="journal" class="journal"></div>
       </section>
+      <footer>🌙 DCA1 Observatory <span>Private signals. A clearer perspective.</span></footer>
     </div>
   </main>
 
