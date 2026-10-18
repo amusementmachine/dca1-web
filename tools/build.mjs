@@ -1,0 +1,10 @@
+import { readFile, mkdir, cp } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+const config = JSON.parse(await readFile('firebase.json'));
+if (config.hosting.public !== 'dist') throw new Error('Only the built frontend may be deployed');
+execFileSync(process.execPath,['--check','public/app.js']);
+const html = await readFile('public/index.html','utf8');
+if (!html.includes('id="gate"') || !html.includes('id="app" hidden')) throw new Error('Missing authentication gate');
+await mkdir('dist',{recursive:true});
+for(const file of ['index.html','app.js','styles.css']) await cp(`public/${file}`,`dist/${file}`);
+console.log('Built three public assets. Private source and data are excluded.');

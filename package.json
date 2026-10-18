@@ -1,0 +1,6 @@
+{
+  "name": "dca1-web", "private": true, "type": "module",
+  "scripts": {"build":"node tools/build.mjs", "test":"node --test tests/app.test.mjs", "test:rules":"node --test tests/rules.test.mjs"},
+  "devDependencies": {"jsdom":"^26.0.0", "@firebase/rules-unit-testing":"^5.0.0", "firebase":"12.19.0"},
+  "overrides": {"@grpc/grpc-js":"^1.13.6"}
+}

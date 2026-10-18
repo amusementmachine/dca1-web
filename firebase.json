@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "public",
+    "public": "dist",
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -11,12 +11,35 @@
       {
         "source": "**/*.@(js|css|html)",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
         ]
       }
+    ],
+    "predeploy": [
+      "npm run build"
     ]
   },
   "firestore": {
+    "database": "dca1",
     "rules": "firestore.rules"
+  },
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "DCA1 Dashboard",
+        "supportEmail": "theamusementmachine@gmail.com"
+      }
+    }
+  },
+  "emulators": {
+    "ui": {
+      "enabled": false
+    },
+    "firestore": {
+      "port": 8180
+    }
   }
 }

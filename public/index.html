@@ -13,12 +13,13 @@
       <div>
         <div class="eyebrow">DCA1</div>
         <h1>Trading Control</h1>
-        <div id="status" class="muted">Connecting…</div>
+        <div id="status" class="muted" role="status" aria-live="polite">Connecting…</div>
       </div>
       <div class="actions">
         <span id="userLabel" class="muted"></span>
         <button id="signIn" hidden>Sign in with Google</button>
         <button id="signOut" class="secondary" hidden>Sign out</button>
+        <button id="retry" class="secondary" hidden>Retry connection</button>
       </div>
     </header>
 
@@ -26,7 +27,7 @@
       <h2>Private dashboard</h2>
       <p>Sign in with an authorized Google account to view DCA1 state.</p>
       <button id="gateSignIn">Sign in with Google</button>
-      <p id="gateMessage" class="muted"></p>
+      <p id="gateMessage" class="muted" role="alert"></p>
     </section>
 
     <div id="app" hidden>
@@ -49,8 +50,9 @@
             <h2>Wave precursor</h2>
             <span id="waveBadge" class="badge">—</span>
           </div>
-          <canvas id="waveChart" width="900" height="320"></canvas>
+          <canvas id="waveChart" width="900" height="320" role="img" aria-label="Wave score history, from 0 to 100. Exact values are in the score history table below."></canvas>
           <div id="waveMeta" class="muted"></div>
+          <details><summary>Score history values</summary><div class="table-scroll"><table id="historyTable"></table></div></details>
         </article>
         <article class="card">
           <h2>Mined profit vault</h2>
@@ -58,6 +60,11 @@
           <h3>Latest learning</h3>
           <div id="learning" class="stack"></div>
         </article>
+      </section>
+
+      <section class="grid two space-top">
+        <article class="card"><h2>Latest assistant response</h2><div id="response"></div></article>
+        <article class="card"><h2>Direction &amp; current strategy</h2><div id="direction"></div></article>
       </section>
 
       <section class="card space-top">
@@ -73,11 +80,6 @@
     </div>
   </main>
 
-  <!-- Firebase Hosting reserved URLs auto-configure the deployed project. -->
-  <script src="/__/firebase/8.10.1/firebase-app.js"></script>
-  <script src="/__/firebase/8.10.1/firebase-auth.js"></script>
-  <script src="/__/firebase/8.10.1/firebase-firestore.js"></script>
-  <script src="/__/firebase/init.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

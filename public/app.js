@@ -1,12 +1,26 @@
-(() => {
-  const auth = firebase.auth();
-  const db = firebase.firestore();
-  const provider = new firebase.auth.GoogleAuthProvider();
+(async () => {
+  const [{ initializeApp }, { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged },
+    { getFirestore, doc, collection, getDoc, onSnapshot, query, orderBy, limit }] = await Promise.all([
+    import('https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js'),
+    import('https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js'),
+    import('https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js')
+  ]);
+  const config = await fetch('/__/firebase/init.json');
+  if (!config.ok) throw new Error('Firebase Hosting configuration is unavailable.');
+  const app = initializeApp(await config.json());
+  const auth = getAuth(app);
+  // Live updates are required for the dashboard; standard realtime queries are intentional.
+  const db = getFirestore(app, 'dca1');
+  const provider = new GoogleAuthProvider();
 
   const $ = id => document.getElementById(id);
-  const fmtMoney = value => Number.isFinite(Number(value)) ? '$' + Number(value).toFixed(2) : '—';
-  const fmtPct = value => Number.isFinite(Number(value)) ? Number(value).toFixed(2) + '%' : '—';
+  const numeric = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+  const fmtMoney = value => numeric(value) ? '$' + Number(value).toFixed(2) : '—';
+  const fmtPct = value => numeric(value) ? Number(value).toFixed(2) + '%' : '—';
   const text = value => value == null ? '—' : String(value);
+  const dateText = value => { const d = value?.toDate ? value.toDate() : new Date(value); return value && !isNaN(d) ? d.toLocaleString() : 'Unknown time'; };
+  let session = 0;
+  let chartItems = [];
   let unsubCurrent = null;
   let unsubIterations = null;
 
@@ -27,7 +41,7 @@
   async function signIn() {
     $('gateMessage').textContent = '';
     try {
-      await auth.signInWithPopup(provider);
+      await signInWithPopup(auth, provider);
     } catch (err) {
       $('gateMessage').textContent = err.message || 'Google sign-in failed.';
     }
@@ -40,12 +54,14 @@
   }
 
   async function authorize(user) {
-    const access = await db.collection('access').doc(user.uid).get();
-    return access.exists;
+    const access = await getDoc(doc(db, 'access', user.uid));
+    return access.exists();
   }
 
   function signedOut() {
+    session++;
     stopListeners();
+    resetData();
     $('app').hidden = true;
     $('gate').hidden = false;
     $('signIn').hidden = false;
@@ -54,25 +70,49 @@
     setStatus('Authentication required');
   }
 
+  function resetData(message = 'Loading…') {
+    ['kpis','campaigns','thinking','vault','learning','journal','response','direction','historyTable'].forEach(id => { clear($(id)); $(id).textContent = message; });
+    $('waveBadge').textContent = '—'; $('waveMeta').textContent = '';
+    $('iterationCount').textContent = '0';
+    chartItems = []; drawWave([]);
+  }
+
+  function readError(err) {
+    setStatus('Data unavailable · ' + (err.message || err));
+    $('retry').hidden = false;
+    if (err.code === 'permission-denied') {
+      stopListeners(); resetData('Access was removed. Sign in with an authorized account.');
+      $('app').hidden = true; $('gate').hidden = false;
+      $('gateMessage').textContent = 'Dashboard access was removed or expired.';
+    }
+  }
+
   function listen() {
     stopListeners();
-    unsubCurrent = db.collection('dashboard').doc('current').onSnapshot(
+    resetData(); $('retry').hidden = true;
+    const active = session;
+    unsubCurrent = onSnapshot(doc(db, 'dashboard', 'current'),
       snap => {
-        if (!snap.exists) {
+        if (active !== session) return;
+        if (!snap.exists()) {
+          renderCurrent({});
           setStatus('Connected · waiting for first dashboard snapshot');
           return;
         }
         const data = snap.data();
         renderCurrent(data);
-        setStatus('Live · updated ' + text(data.updated_at || data.timestamp));
+        const stamp = data.updated_at || data.timestamp;
+        const stale = Date.now() - new Date(stamp).getTime() > 2 * 60 * 60 * 1000;
+        setStatus((snap.metadata?.fromCache ? 'Cached' : stale ? 'Connected · snapshot is over 2 hours old' : 'Live') + ' · updated ' + dateText(stamp));
       },
-      err => setStatus('Dashboard read failed: ' + err.message)
+      readError
     );
 
-    unsubIterations = db.collection('iterations').orderBy('timestamp', 'desc').limit(50).onSnapshot(
-      snap => renderIterations(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+    unsubIterations = onSnapshot(query(collection(db, 'iterations'), orderBy('timestamp', 'desc'), limit(200)),
+      snap => { if (active === session) renderIterations(snap.docs.map(d => ({ id: d.id, ...d.data() }))); },
       err => {
         $('journal').textContent = 'Iteration history read failed: ' + err.message;
+        readError(err);
       }
     );
   }
@@ -89,7 +129,7 @@
       ['Available USD', fmtMoney(portfolio.available_usd ?? portfolio.dca1_available_usd ?? data.available_usd)],
       ['Wave phase', wave.phase != null ? 'Phase ' + wave.phase : '—'],
       ['Wave score', text(wave.score ?? wave.precursor_score)],
-      ['Maker / taker', `${fmtPct((fee.maker ?? 0) * 100)} / ${fmtPct((fee.taker ?? 0) * 100)}`],
+      ['Maker / taker', `${fmtPct(numeric(fee.maker) ? fee.maker * 100 : null)} / ${fmtPct(numeric(fee.taker) ? fee.taker * 100 : null)}`],
       ['Vault value', fmtMoney(vault.market_value_usd ?? vault.vault_market_value_usd)]
     ].forEach(([a,b]) => kpis.appendChild(metric(a,b)));
 
@@ -97,8 +137,17 @@
     renderThinking(data.current_thinking || {});
     renderVault(vault);
     renderLearning(data.learning || data.insights || []);
+    renderNarrative($('response'), data.assistant_response, 'No assistant response was saved for this iteration.');
+    renderNarrative($('direction'), data.direction || data.direction_changes, 'No direction update was saved.');
     $('waveBadge').textContent = wave.phase != null ? `Phase ${wave.phase}` : '—';
     $('waveMeta').textContent = `Breadth: ${text(wave.breadth)} · synchronization: ${text(wave.synchronization)}`;
+  }
+
+  function renderNarrative(root, value, empty) {
+    clear(root);
+    const list = Array.isArray(value) ? value : value ? [value] : [];
+    if (!list.length) root.appendChild(el('p', 'muted', empty));
+    list.forEach(item => root.appendChild(el('p', 'narrative', typeof item === 'string' ? item : JSON.stringify(item))));
   }
 
   function normalizeCampaigns(value) {
@@ -125,6 +174,7 @@
     const root = $('thinking');
     clear(root);
     const fields = [
+      ['Latest assessment', typeof thinking === 'string' ? thinking : thinking.headline],
       ['Market interpretation', thinking.market_interpretation],
       ['Testing now', thinking.testing_now],
       ['Direction', thinking.direction],
@@ -176,19 +226,24 @@
     }
     items.forEach(item => {
       const box = el('article', 'journal-entry');
-      const title = el('div', 'journal-title', `${text(item.timestamp)} · ${text(item.headline || item.summary || item.run_type || 'Iteration')}`);
+      const title = el('div', 'journal-title', `${dateText(item.timestamp)} · ${text(item.headline || item.summary || item.run_type || 'Iteration')}`);
       box.appendChild(title);
       const wave = item.wave || item.wave_precursor || {};
       box.appendChild(el('div', 'muted', `Phase ${text(wave.phase)} · score ${text(wave.score ?? wave.precursor_score)} · ${text(item.strategy_version || '')}`));
       const insight = item.assistant_response || item.narrative?.assistant_response || item.direction || item.summary;
       if (insight) box.appendChild(el('div', '', insight));
+      [['Insights', item.insights], ['Direction', item.direction || item.direction_changes], ['Current thinking', item.current_thinking]].forEach(([label, value]) => {
+        if (!value || (Array.isArray(value) && !value.length)) return;
+        box.appendChild(el('h3', '', label));
+        const root = el('div'); renderNarrative(root, value, ''); box.appendChild(root);
+      });
       const details = document.createElement('details');
-      details.appendChild(el('summary', '', 'Raw snapshot'));
+      details.appendChild(el('summary', '', 'Dashboard data'));
       details.appendChild(el('pre', '', JSON.stringify(item, null, 2)));
       box.appendChild(details);
       root.appendChild(box);
     });
-    drawWave(items.slice().reverse());
+    chartItems = items.slice().reverse(); drawWave(chartItems);
   }
 
   function drawWave(items) {
@@ -203,16 +258,23 @@
     ctx.clearRect(0,0,cssW,cssH);
     const pts = items.map(x => ({
       t: x.timestamp,
-      s: Number((x.wave || x.wave_precursor || {}).score ?? (x.wave || x.wave_precursor || {}).precursor_score)
-    })).filter(x => Number.isFinite(x.s)).slice(-30);
+      s: (x.wave || x.wave_precursor || {}).score ?? (x.wave || x.wave_precursor || {}).precursor_score ?? x.wave_score
+    })).filter(x => numeric(x.s));
+    const table = $('historyTable'); clear(table);
+    const caption = el('caption', '', 'Score history · latest 200 iterations'); table.appendChild(caption);
+    const head = el('tr'); ['Time', 'Wave score'].forEach(t => head.appendChild(el('th', '', t))); table.appendChild(head);
+    pts.slice().reverse().forEach(p => { const row = el('tr'); row.append(el('td', '', dateText(p.t)), el('td', '', p.s)); table.appendChild(row); });
     const pad = 34;
     ctx.strokeStyle = '#29323c';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(pad,pad); ctx.lineTo(pad,cssH-pad); ctx.lineTo(cssW-pad,cssH-pad); ctx.stroke();
-    if (pts.length < 2) {
+    if (!pts.length) {
       ctx.fillStyle = '#98a3ae'; ctx.font = '14px system-ui'; ctx.fillText('Wave history appears after mirrored scored iterations.', pad+10, pad+24); return;
     }
-    const dx = (cssW - pad*2) / (pts.length-1);
+    const dx = (cssW - pad*2) / Math.max(1, pts.length-1);
+    ctx.fillStyle = '#98a3ae'; ctx.font = '12px system-ui';
+    [0,50,100].forEach(s => ctx.fillText(String(s), 5, cssH-pad-s/100*(cssH-pad*2)));
+    ctx.fillText(dateText(pts[0].t), pad, cssH-8);
     ctx.strokeStyle = '#7aa2ff'; ctx.lineWidth = 3; ctx.beginPath();
     pts.forEach((p,i) => {
       const x = pad + i*dx;
@@ -220,27 +282,33 @@
       if (!i) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     });
     ctx.stroke();
+    pts.forEach((p,i) => { ctx.fillStyle = '#7aa2ff'; ctx.beginPath(); ctx.arc(pad+i*dx,cssH-pad-Number(p.s)/100*(cssH-pad*2),3,0,Math.PI*2); ctx.fill(); });
   }
 
   $('signIn').addEventListener('click', signIn);
   $('gateSignIn').addEventListener('click', signIn);
-  $('signOut').addEventListener('click', () => auth.signOut());
+  $('signOut').addEventListener('click', () => { signedOut(); signOut(auth).catch(err => { $('gateMessage').textContent = 'Sign-out failed: ' + err.message; }); });
+  $('retry').addEventListener('click', () => { if (auth.currentUser) listen(); });
   window.addEventListener('resize', () => {
-    // chart redraws on the next Firestore update; current responsive canvas remains readable.
+    if (!$('app').hidden) drawWave(chartItems);
   });
 
-  auth.onAuthStateChanged(async user => {
+  onAuthStateChanged(auth, async user => {
     if (!user) return signedOut();
+    stopListeners(); resetData(); $('app').hidden = true; $('gate').hidden = false;
+    const active = ++session;
     $('userLabel').textContent = user.email || user.displayName || 'Signed in';
     $('signIn').hidden = true;
     $('signOut').hidden = false;
     setStatus('Checking access…');
     try {
-      if (!(await authorize(user))) {
+      const allowed = await authorize(user);
+      if (active !== session) return;
+      if (!allowed) {
         stopListeners();
         $('app').hidden = true;
         $('gate').hidden = false;
-        $('gateMessage').textContent = 'This Google account is signed in but is not authorized for the DCA1 dashboard.';
+        $('gateMessage').textContent = 'This account needs dashboard access. Ask the administrator to authorize UID: ' + user.uid;
         setStatus('Signed in · access not granted');
         return;
       }
@@ -250,8 +318,13 @@
       setStatus('Authorized · connecting to live data…');
       listen();
     } catch (err) {
+      if (active !== session) return;
       $('gateMessage').textContent = 'Could not verify access: ' + (err.message || err);
       setStatus('Access verification failed');
     }
   });
-})();
+})().catch(err => {
+  document.getElementById('status').textContent = 'Firebase could not connect';
+  document.getElementById('gateMessage').textContent = (err.message || err) + ' Check your connection and reload the Firebase Hosting URL.';
+  document.getElementById('gateSignIn').disabled = true;
+});
