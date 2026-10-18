@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>DCA1 Trading Control</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main>
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">DCA1</div>
+        <h1>Trading Control</h1>
+        <div id="status" class="muted">Connecting…</div>
+      </div>
+      <div class="actions">
+        <span id="userLabel" class="muted"></span>
+        <button id="signIn" hidden>Sign in with Google</button>
+        <button id="signOut" class="secondary" hidden>Sign out</button>
+      </div>
+    </header>
+
+    <section id="gate" class="gate card">
+      <h2>Private dashboard</h2>
+      <p>Sign in with an authorized Google account to view DCA1 state.</p>
+      <button id="gateSignIn">Sign in with Google</button>
+      <p id="gateMessage" class="muted"></p>
+    </section>
+
+    <div id="app" hidden>
+      <section id="kpis" class="grid kpis"></section>
+
+      <section class="grid two">
+        <article class="card">
+          <h2>Active campaigns</h2>
+          <div id="campaigns" class="stack"></div>
+        </article>
+        <article class="card">
+          <h2>Current thinking</h2>
+          <div id="thinking" class="stack"></div>
+        </article>
+      </section>
+
+      <section class="grid two space-top">
+        <article class="card">
+          <div class="section-head">
+            <h2>Wave precursor</h2>
+            <span id="waveBadge" class="badge">—</span>
+          </div>
+          <canvas id="waveChart" width="900" height="320"></canvas>
+          <div id="waveMeta" class="muted"></div>
+        </article>
+        <article class="card">
+          <h2>Mined profit vault</h2>
+          <div id="vault" class="stack"></div>
+          <h3>Latest learning</h3>
+          <div id="learning" class="stack"></div>
+        </article>
+      </section>
+
+      <section class="card space-top">
+        <div class="section-head">
+          <div>
+            <h2>Iteration journal</h2>
+            <div class="muted">Realtime snapshots from Firestore.</div>
+          </div>
+          <span id="iterationCount" class="badge">0</span>
+        </div>
+        <div id="journal" class="journal"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Firebase Hosting reserved URLs auto-configure the deployed project. -->
+  <script src="/__/firebase/8.10.1/firebase-app.js"></script>
+  <script src="/__/firebase/8.10.1/firebase-auth.js"></script>
+  <script src="/__/firebase/8.10.1/firebase-firestore.js"></script>
+  <script src="/__/firebase/init.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
